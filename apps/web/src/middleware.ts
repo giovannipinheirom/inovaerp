@@ -1,16 +1,25 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { updateSession } from '@/utils/supabase/middleware';
 
 export function middleware(request: NextRequest) {
-  const isAuthPage = request.nextUrl.pathname.startsWith('/login');
-  
-  // NOTE: In a real app we'd verify the token or cookie
-  // For this mock with localStorage we just let client side handle most redirects
-  // Or if we use cookies, check here:
-  // const token = request.cookies.get('auth-storage');
-  
-  // return NextResponse.next();
-  return NextResponse.next();
+  // Renova sessão Supabase automaticamente
+  const response = updateSession(request);
+
+  // Rotas públicas (não precisam de autenticação)
+  const publicPaths = ['/login', '/register'];
+  const isPublicPath = publicPaths.some((path) =>
+    request.nextUrl.pathname.startsWith(path)
+  );
+
+  if (isPublicPath) {
+    return response;
+  }
+
+  // Para rotas protegidas, verificar se há token de autenticação
+  // O auth-store do Zustand persiste no localStorage (client-side),
+  // então a proteção real é feita no layout do dashboard
+  return response;
 }
 
 export const config = {
