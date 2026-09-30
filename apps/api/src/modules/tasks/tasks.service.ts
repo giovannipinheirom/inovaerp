@@ -46,14 +46,16 @@ export class TasksService {
 
   async findAll(query: TaskQueryDto, tenantId: string) {
     const { status, priority, clientId, assigneeId, dueDateFrom, dueDateTo, competence, search, page = 1, limit = 10 } = query;
-    const skip = (page - 1) * limit;
+    const pageNum = Number(page);
+    const limitNum = Number(limit);
+    const skip = (pageNum - 1) * limitNum;
 
     const where: any = { tenantId };
     
     if (status) where.status = status;
     if (priority) where.priority = priority;
     if (clientId) where.clientId = clientId;
-    if (assigneeId) where.assignments = { some: { userId: assigneeId } };
+    if (assigneeId) where.assignments = { some: { changedById: assigneeId } };
     if (competence) where.competence = competence;
     
     if (dueDateFrom || dueDateTo) {
@@ -73,11 +75,11 @@ export class TasksService {
       this.prisma.task.findMany({
         where,
         skip,
-        take: +limit,
+        take: limitNum,
         orderBy: { createdAt: 'desc' },
         include: {
           client: { select: { id: true, name: true } },
-          assignments: { include: { user: { select: { id: true, fullName: true } } } }
+          assignments: { include: { user: { select: { id: true, profile: { select: { fullName: true } } } } } }
         }
       }),
       this.prisma.task.count({ where }),
@@ -92,9 +94,9 @@ export class TasksService {
       include: {
         client: true,
         steps: true,
-        assignments: { include: { user: { select: { id: true, fullName: true } } } },
-        comments: { include: { author: { select: { id: true, fullName: true } } }, orderBy: { createdAt: 'asc' } },
-        statusHistory: { orderBy: { createdAt: 'desc' } },
+        assignments: { include: { user: { select: { id: true, profile: { select: { fullName: true } } } } } },
+        comments: { include: { user: { select: { id: true, profile: { select: { fullName: true } } } } }, orderBy: { createdAt: 'asc' } },
+        statusHistory: { orderBy: { changedAt: 'desc' } },
         attachments: true
       },
     });
@@ -106,13 +108,13 @@ export class TasksService {
     const task = await this.findOne(id, tenantId);
     return this.prisma.task.update({
       where: { id: task.id },
-      data: updateTaskDto,
+      data: updateTaskDto as any,
     });
   }
 
-  async changeStatus(id: string, changeStatusDto: ChangeStatusDto, tenantId: string, userId: string) {
+  async changeStatus(id: string, changeStatusDto: ChangeStatusDto, tenantId: string, changedById: string) {
     const task = await this.findOne(id, tenantId);
-    const { status: newStatus, reason } = changeStatusDto;
+    const { status: newStatus, reason } = changeStatusDto as any;
 
     if (!canTransition(task.status, newStatus)) {
       throw new BadRequestException(`Transição de ${task.status} para ${newStatus} não permitida.`);
@@ -121,15 +123,15 @@ export class TasksService {
     return this.prisma.$transaction(async (tx) => {
       const updated = await tx.task.update({
         where: { id },
-        data: { status: newStatus },
+        data: { status: newStatus as any },
       });
 
       await tx.taskStatusHistory.create({
         data: {
           taskId: id,
-          status: newStatus,
+          newStatus: newStatus as any, oldStatus: task.status as any,
           reason,
-          userId
+          changedById
         }
       });
 
@@ -137,10 +139,10 @@ export class TasksService {
     });
   }
 
-  async assignUser(taskId: string, userId: string, tenantId: string) {
+  async assignUser(taskId: string, changedById: string, tenantId: string) {
     const task = await this.findOne(taskId, tenantId);
     return this.prisma.taskAssignment.create({
-      data: { taskId: task.id, userId }
+      data: { taskId: task.id, changedById }
     });
   }
 
@@ -155,17 +157,17 @@ export class TasksService {
     await this.findOne(taskId, tenantId);
     return this.prisma.taskStep.update({
       where: { id: stepId },
-      data: { completed: true, completedAt: new Date() }
+      data: { status: 'completed' }
     });
   }
 
-  async addComment(taskId: string, createCommentDto: CreateCommentDto, tenantId: string, authorId: string) {
+  async addComment(taskId: string, createCommentDto: CreateCommentDto, tenantId: string, changedById: string) {
     const task = await this.findOne(taskId, tenantId);
     return this.prisma.taskComment.create({
       data: {
-        content: createCommentDto.content,
+        text: createCommentDto.content,
         taskId: task.id,
-        authorId
+        changedById
       }
     });
   }
@@ -181,7 +183,7 @@ export class TasksService {
       where: { 
         tenantId,
         status: { notIn: ['completed', 'cancelled'] },
-        dueDate: { lt: new Date() }
+        dueDateInternal: { lt: new Date() }
       }
     });
 
@@ -203,9 +205,9 @@ export class TasksService {
     };
   }
 
-  async batchUpdateStatus(taskIds: string[], status: string, tenantId: string, userId: string) {
+  async batchUpdateStatus(taskIds: string[], status: string, tenantId: string, changedById: string) {
     for (const taskId of taskIds) {
-      await this.changeStatus(taskId, { status }, tenantId, userId).catch(e => console.error(e));
+      await this.changeStatus(taskId, { status }, tenantId, changedById).catch(e => console.error(e));
     }
     return { success: true };
   }

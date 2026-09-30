@@ -10,16 +10,15 @@ export class ClientsService {
 
   async create(createClientDto: CreateClientDto, tenantId: string) {
     return this.prisma.client.create({
-      data: {
-        ...createClientDto,
-        tenantId,
-      },
+      data: { ...createClientDto, tenantId } as any,
     });
   }
 
   async findAll(query: ClientQueryDto, tenantId: string) {
     const { search, taxRegime, status, page = 1, limit = 10 } = query;
-    const skip = (page - 1) * limit;
+    const pageNum = Number(page);
+    const limitNum = Number(limit);
+    const skip = (pageNum - 1) * limitNum;
 
     const where: any = { tenantId };
     
@@ -42,7 +41,7 @@ export class ClientsService {
       this.prisma.client.findMany({
         where,
         skip,
-        take: +limit,
+        take: limitNum,
         orderBy: { createdAt: 'desc' },
       }),
       this.prisma.client.count({ where }),
@@ -64,7 +63,7 @@ export class ClientsService {
     const client = await this.findOne(id, tenantId);
     return this.prisma.client.update({
       where: { id: client.id },
-      data: updateClientDto,
+      data: updateClientDto as any,
     });
   }
 
@@ -72,13 +71,13 @@ export class ClientsService {
     const client = await this.findOne(id, tenantId);
     return this.prisma.client.update({
       where: { id: client.id },
-      data: { status: 'INACTIVE' },
+      data: { status: 'inactive' },
     });
   }
   
   async addContact(clientId: string, contactDto: any, tenantId: string) {
     const client = await this.findOne(clientId, tenantId);
-    return this.prisma.contact.create({
+    return this.prisma.clientContact.create({
       data: {
         ...contactDto,
         clientId: client.id,
@@ -88,7 +87,7 @@ export class ClientsService {
 
   async updateContact(clientId: string, contactId: string, contactDto: any, tenantId: string) {
     await this.findOne(clientId, tenantId);
-    return this.prisma.contact.update({
+    return this.prisma.clientContact.update({
       where: { id: contactId },
       data: contactDto,
     });
@@ -96,7 +95,7 @@ export class ClientsService {
 
   async removeContact(clientId: string, contactId: string, tenantId: string) {
     await this.findOne(clientId, tenantId);
-    return this.prisma.contact.delete({
+    return this.prisma.clientContact.delete({
       where: { id: contactId },
     });
   }

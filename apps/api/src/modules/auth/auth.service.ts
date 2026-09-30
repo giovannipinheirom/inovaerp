@@ -13,7 +13,7 @@ export class AuthService {
   ) {}
 
   async validateUser(email: string, pass: string) {
-    const user = await this.prisma.user.findUnique({ where: { email } });
+    const user = await this.prisma.user.findFirst({ where: { email } });
     if (user && await bcrypt.compare(pass, user.passwordHash)) {
       const { passwordHash, ...result } = user;
       return result;
@@ -46,7 +46,7 @@ export class AuthService {
             email: registerDto.email,
             passwordHash: hash,
             fullName: registerDto.fullName,
-            role: 'ADMIN',
+            role: 'super_admin',
           }
         },
         departments: {
@@ -63,7 +63,7 @@ export class AuthService {
       }
     });
 
-    const user = tenant.users[0];
+    const user = (tenant as any).users?.[0];
     const { passwordHash, ...result } = user;
     return result;
   }

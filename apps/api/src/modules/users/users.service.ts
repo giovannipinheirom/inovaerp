@@ -11,7 +11,7 @@ export class UsersService {
       select: {
         id: true,
         email: true,
-        fullName: true,
+        profile: { select: { fullName: true } },
         role: true,
         status: true,
         createdAt: true,
@@ -25,7 +25,7 @@ export class UsersService {
       select: {
         id: true,
         email: true,
-        fullName: true,
+        profile: { select: { fullName: true } },
         role: true,
         status: true,
         createdAt: true,
@@ -43,7 +43,7 @@ export class UsersService {
       select: {
         id: true,
         email: true,
-        fullName: true,
+        profile: { select: { fullName: true } },
         role: true,
       }
     });
