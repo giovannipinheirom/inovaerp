@@ -1,0 +1,17 @@
+{
+  "name": "inova-erp",
+  "private": true,
+  "scripts": {
+    "dev:api": "pnpm --filter @inova/api dev",
+    "dev:web": "pnpm --filter @inova/web dev",
+    "dev": "pnpm run dev:api & pnpm run dev:web",
+    "build": "pnpm -r build",
+    "lint": "pnpm -r lint",
+    "db:generate": "pnpm --filter @inova/api prisma:generate",
+    "db:push": "pnpm --filter @inova/api prisma:push",
+    "db:seed": "pnpm --filter @inova/api prisma:seed"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

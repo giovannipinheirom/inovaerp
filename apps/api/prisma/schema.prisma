@@ -1,0 +1,382 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum PlanType {
+  starter
+  professional
+  enterprise
+}
+
+enum UserStatus {
+  active
+  inactive
+  suspended
+}
+
+enum UserRole {
+  super_admin
+  manager
+  supervisor
+  analyst
+  assistant
+  intern
+  client
+}
+
+enum ClientStatus {
+  active
+  inactive
+}
+
+enum TaskCategory {
+  fiscal
+  contabil
+  dp
+  societario
+}
+
+enum DisplacementRule {
+  anticipate
+  postpone
+  none
+}
+
+enum TaskStatus {
+  draft
+  pending
+  in_progress
+  waiting
+  in_review
+  completed
+  cancelled
+}
+
+enum TaskPriority {
+  low
+  normal
+  high
+  urgent
+}
+
+enum TaskAssignmentRole {
+  executor
+  reviewer
+  observer
+}
+
+enum DependencyType {
+  blocks
+  related
+}
+
+enum HolidayType {
+  fixed
+  variable
+}
+
+enum HolidayScope {
+  national
+  state
+  municipal
+}
+
+enum ActionType {
+  I
+  U
+  D
+}
+
+model Tenant {
+  id        String   @id @default(uuid())
+  name      String
+  cnpj      String   @unique
+  plan      PlanType @default(starter)
+  active    Boolean  @default(true)
+  config    Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users         User[]
+  departments   Department[]
+  teams         Team[]
+  clients       Client[]
+  taskTemplates TaskTemplate[]
+  tasks         Task[]
+  notifications Notification[]
+  auditLogs     AuditLog[]
+}
+
+model User {
+  id           String     @id @default(uuid())
+  tenantId     String
+  tenant       Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  email        String
+  passwordHash String
+  status       UserStatus @default(active)
+  role         UserRole
+  lastLoginAt  DateTime?
+  createdAt    DateTime   @default(now())
+
+  profile             UserProfile?
+  taskAssignments     TaskAssignment[]
+  taskStepsCompleted  TaskStepCompletion[]
+  taskComments        TaskComment[]
+  taskAttachments     TaskAttachment[]
+  statusHistory       TaskStatusHistory[]
+  notifications       Notification[]
+  auditLogs           AuditLog[]
+  createdTasks        Task[] @relation("TaskCreator")
+
+  @@unique([tenantId, email])
+}
+
+model UserProfile {
+  id        String  @id
+  user      User    @relation(fields: [id], references: [id], onDelete: Cascade)
+  fullName  String
+  phone     String?
+  avatarUrl String?
+  timezone  String  @default("America/Sao_Paulo")
+}
+
+model Department {
+  id       String @id @default(uuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name     String
+
+  teams Team[]
+
+  @@unique([tenantId, name])
+}
+
+model Team {
+  id           String     @id @default(uuid())
+  tenantId     String
+  tenant       Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  departmentId String
+  department   Department @relation(fields: [departmentId], references: [id])
+  name         String
+
+  taskAssignments TaskAssignment[]
+}
+
+model Client {
+  id          String       @id @default(uuid())
+  tenantId    String
+  tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name        String
+  tradeName   String?
+  document    String
+  taxRegime   String
+  ibgeCode    String?
+  status      ClientStatus @default(active)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  contacts ClientContact[]
+  tasks    Task[]
+
+  @@unique([tenantId, document])
+}
+
+model ClientContact {
+  id              String  @id @default(uuid())
+  clientId        String
+  client          Client  @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  name            String
+  email           String?
+  phone           String?
+  isPrimary       Boolean @default(false)
+  commPreferences Json?
+}
+
+model TaskTemplate {
+  id               String       @id @default(uuid())
+  tenantId         String
+  tenant           Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name             String
+  category         TaskCategory
+  defaultPriority  TaskPriority @default(normal)
+  slaInternalDays  Int          @default(0)
+  createdAt        DateTime     @default(now())
+
+  recurrenceRules TaskRecurrenceRule[]
+  tasks           Task[]
+}
+
+model TaskRecurrenceRule {
+  id               String           @id @default(uuid())
+  templateId       String
+  template         TaskTemplate     @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  rruleExpression  String
+  displacementRule DisplacementRule @default(none)
+  leadDays         Int              @default(0)
+  active           Boolean          @default(true)
+}
+
+model Task {
+  id                 String       @id @default(uuid())
+  tenantId           String
+  tenant             Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  clientId           String
+  client             Client       @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  templateId         String?
+  template           TaskTemplate? @relation(fields: [templateId], references: [id])
+  readableCode       String
+  title              String
+  description        String?
+  status             TaskStatus   @default(draft)
+  priority           TaskPriority @default(normal)
+  competence         String?
+  dueDateLegal       DateTime?
+  dueDateInternal    DateTime?
+  startedAt          DateTime?
+  completedAt        DateTime?
+  cancelledAt        DateTime?
+  cancellationReason String?
+  customData         Json?
+  createdById        String
+  creator            User         @relation("TaskCreator", fields: [createdById], references: [id])
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+
+  assignments     TaskAssignment[]
+  steps           TaskStep[]
+  comments        TaskComment[]
+  attachments     TaskAttachment[]
+  statusHistory   TaskStatusHistory[]
+
+  dependentTasks TaskDependency[] @relation("DependsOnTask")
+  blockingTasks  TaskDependency[] @relation("BlockedTask")
+
+  @@index([tenantId, status, dueDateInternal])
+}
+
+model TaskAssignment {
+  id         String             @id @default(uuid())
+  taskId     String
+  task       Task               @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User               @relation(fields: [userId], references: [id])
+  teamId     String?
+  team       Team?              @relation(fields: [teamId], references: [id])
+  role       TaskAssignmentRole @default(executor)
+  assignedAt DateTime           @default(now())
+}
+
+model TaskStep {
+  id          String   @id @default(uuid())
+  taskId      String
+  task        Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  description String
+  orderIndex  Int      @default(0)
+  isMandatory Boolean  @default(true)
+  status      String   @default("pending")
+
+  completions TaskStepCompletion[]
+}
+
+model TaskStepCompletion {
+  id           String   @id @default(uuid())
+  stepId       String
+  step         TaskStep @relation(fields: [stepId], references: [id], onDelete: Cascade)
+  completedById String
+  completedBy  User     @relation(fields: [completedById], references: [id])
+  completedAt  DateTime @default(now())
+  notes        String?
+}
+
+model TaskComment {
+  id        String   @id @default(uuid())
+  taskId    String
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  text      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model TaskAttachment {
+  id           String   @id @default(uuid())
+  taskId       String
+  task         Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  fileName     String
+  fileUrl      String
+  fileSize     Int
+  mimeType     String
+  fileHash     String?
+  uploadedById String
+  uploadedBy   User     @relation(fields: [uploadedById], references: [id])
+  uploadedAt   DateTime @default(now())
+}
+
+model TaskDependency {
+  taskId          String
+  task            Task           @relation("BlockedTask", fields: [taskId], references: [id], onDelete: Cascade)
+  dependsOnTaskId String
+  dependsOnTask   Task           @relation("DependsOnTask", fields: [dependsOnTaskId], references: [id], onDelete: Cascade)
+  type            DependencyType @default(blocks)
+
+  @@id([taskId, dependsOnTaskId])
+}
+
+model TaskStatusHistory {
+  id          String     @id @default(uuid())
+  taskId      String
+  task        Task       @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  oldStatus   TaskStatus
+  newStatus   TaskStatus
+  changedById String
+  changedBy   User       @relation(fields: [changedById], references: [id])
+  reason      String?
+  changedAt   DateTime   @default(now())
+}
+
+model Holiday {
+  id        String       @id @default(uuid())
+  date      DateTime
+  name      String
+  type      HolidayType
+  scope     HolidayScope
+  stateCode String?
+  ibgeCode  String?
+}
+
+model Notification {
+  id            String   @id @default(uuid())
+  tenantId      String
+  tenant        Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title         String
+  message       String
+  type          String
+  referenceType String?
+  referenceId   String?
+  isRead        Boolean  @default(false)
+  createdAt     DateTime @default(now())
+}
+
+model AuditLog {
+  id        String     @id @default(uuid())
+  tenantId  String
+  tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  userId    String?
+  user      User?      @relation(fields: [userId], references: [id])
+  tableName String
+  recordId  String
+  action    ActionType
+  oldData   Json?
+  newData   Json?
+  ipAddress String?
+  createdAt DateTime   @default(now())
+}
